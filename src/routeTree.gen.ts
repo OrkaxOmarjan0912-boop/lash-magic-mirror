@@ -9,8 +9,38 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TryOnRouteImport } from './routes/try-on'
+import { Route as SalonConfigRouteImport } from './routes/salon-config'
+import { Route as MyLooksRouteImport } from './routes/my-looks'
+import { Route as GalleryRouteImport } from './routes/gallery'
+import { Route as BookingRouteImport } from './routes/booking'
 import { Route as IndexRouteImport } from './routes/index'
 
+const TryOnRoute = TryOnRouteImport.update({
+  id: '/try-on',
+  path: '/try-on',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SalonConfigRoute = SalonConfigRouteImport.update({
+  id: '/salon-config',
+  path: '/salon-config',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MyLooksRoute = MyLooksRouteImport.update({
+  id: '/my-looks',
+  path: '/my-looks',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GalleryRoute = GalleryRouteImport.update({
+  id: '/gallery',
+  path: '/gallery',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BookingRoute = BookingRouteImport.update({
+  id: '/booking',
+  path: '/booking',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -19,28 +49,96 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/booking': typeof BookingRoute
+  '/gallery': typeof GalleryRoute
+  '/my-looks': typeof MyLooksRoute
+  '/salon-config': typeof SalonConfigRoute
+  '/try-on': typeof TryOnRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/booking': typeof BookingRoute
+  '/gallery': typeof GalleryRoute
+  '/my-looks': typeof MyLooksRoute
+  '/salon-config': typeof SalonConfigRoute
+  '/try-on': typeof TryOnRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/booking': typeof BookingRoute
+  '/gallery': typeof GalleryRoute
+  '/my-looks': typeof MyLooksRoute
+  '/salon-config': typeof SalonConfigRoute
+  '/try-on': typeof TryOnRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/booking'
+    | '/gallery'
+    | '/my-looks'
+    | '/salon-config'
+    | '/try-on'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/booking' | '/gallery' | '/my-looks' | '/salon-config' | '/try-on'
+  id:
+    | '__root__'
+    | '/'
+    | '/booking'
+    | '/gallery'
+    | '/my-looks'
+    | '/salon-config'
+    | '/try-on'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  BookingRoute: typeof BookingRoute
+  GalleryRoute: typeof GalleryRoute
+  MyLooksRoute: typeof MyLooksRoute
+  SalonConfigRoute: typeof SalonConfigRoute
+  TryOnRoute: typeof TryOnRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/try-on': {
+      id: '/try-on'
+      path: '/try-on'
+      fullPath: '/try-on'
+      preLoaderRoute: typeof TryOnRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/salon-config': {
+      id: '/salon-config'
+      path: '/salon-config'
+      fullPath: '/salon-config'
+      preLoaderRoute: typeof SalonConfigRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/my-looks': {
+      id: '/my-looks'
+      path: '/my-looks'
+      fullPath: '/my-looks'
+      preLoaderRoute: typeof MyLooksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/gallery': {
+      id: '/gallery'
+      path: '/gallery'
+      fullPath: '/gallery'
+      preLoaderRoute: typeof GalleryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/booking': {
+      id: '/booking'
+      path: '/booking'
+      fullPath: '/booking'
+      preLoaderRoute: typeof BookingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -53,17 +151,12 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  BookingRoute: BookingRoute,
+  GalleryRoute: GalleryRoute,
+  MyLooksRoute: MyLooksRoute,
+  SalonConfigRoute: SalonConfigRoute,
+  TryOnRoute: TryOnRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
