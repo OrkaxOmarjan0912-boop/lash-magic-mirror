@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TryOnRouteImport } from './routes/try-on'
+import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as SalonConfigRouteImport } from './routes/salon-config'
 import { Route as MyLooksRouteImport } from './routes/my-looks'
 import { Route as GalleryRouteImport } from './routes/gallery'
@@ -19,6 +20,11 @@ import { Route as IndexRouteImport } from './routes/index'
 const TryOnRoute = TryOnRouteImport.update({
   id: '/try-on',
   path: '/try-on',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
+  id: '/sitemap.xml',
+  path: '/sitemap.xml',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SalonConfigRoute = SalonConfigRouteImport.update({
@@ -53,6 +59,7 @@ export interface FileRoutesByFullPath {
   '/gallery': typeof GalleryRoute
   '/my-looks': typeof MyLooksRoute
   '/salon-config': typeof SalonConfigRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/try-on': typeof TryOnRoute
 }
 export interface FileRoutesByTo {
@@ -61,6 +68,7 @@ export interface FileRoutesByTo {
   '/gallery': typeof GalleryRoute
   '/my-looks': typeof MyLooksRoute
   '/salon-config': typeof SalonConfigRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/try-on': typeof TryOnRoute
 }
 export interface FileRoutesById {
@@ -70,6 +78,7 @@ export interface FileRoutesById {
   '/gallery': typeof GalleryRoute
   '/my-looks': typeof MyLooksRoute
   '/salon-config': typeof SalonConfigRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/try-on': typeof TryOnRoute
 }
 export interface FileRouteTypes {
@@ -80,9 +89,17 @@ export interface FileRouteTypes {
     | '/gallery'
     | '/my-looks'
     | '/salon-config'
+    | '/sitemap.xml'
     | '/try-on'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/booking' | '/gallery' | '/my-looks' | '/salon-config' | '/try-on'
+  to:
+    | '/'
+    | '/booking'
+    | '/gallery'
+    | '/my-looks'
+    | '/salon-config'
+    | '/sitemap.xml'
+    | '/try-on'
   id:
     | '__root__'
     | '/'
@@ -90,6 +107,7 @@ export interface FileRouteTypes {
     | '/gallery'
     | '/my-looks'
     | '/salon-config'
+    | '/sitemap.xml'
     | '/try-on'
   fileRoutesById: FileRoutesById
 }
@@ -99,6 +117,7 @@ export interface RootRouteChildren {
   GalleryRoute: typeof GalleryRoute
   MyLooksRoute: typeof MyLooksRoute
   SalonConfigRoute: typeof SalonConfigRoute
+  SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TryOnRoute: typeof TryOnRoute
 }
 
@@ -109,6 +128,13 @@ declare module '@tanstack/react-router' {
       path: '/try-on'
       fullPath: '/try-on'
       preLoaderRoute: typeof TryOnRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sitemap.xml': {
+      id: '/sitemap.xml'
+      path: '/sitemap.xml'
+      fullPath: '/sitemap.xml'
+      preLoaderRoute: typeof SitemapDotxmlRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/salon-config': {
@@ -155,6 +181,7 @@ const rootRouteChildren: RootRouteChildren = {
   GalleryRoute: GalleryRoute,
   MyLooksRoute: MyLooksRoute,
   SalonConfigRoute: SalonConfigRoute,
+  SitemapDotxmlRoute: SitemapDotxmlRoute,
   TryOnRoute: TryOnRoute,
 }
 export const routeTree = rootRouteImport

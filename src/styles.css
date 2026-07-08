@@ -83,3 +83,8 @@
 }
 
 @utility hairline { border: 1px solid color-mix(in oklab, var(--charcoal) 10%, transparent); }
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+}
