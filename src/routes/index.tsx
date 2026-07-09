@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight, Camera, Sparkles, Send } from "lucide-react";
 import { LASH_STYLES } from "@/lib/lash-styles";
 import { BrandHeader } from "@/components/BrandHeader";
+import catEyeHero from "@/assets/cat-eye-hero.jpg";
 
 export const Route = createFileRoute("/")({
   head: () => ({
