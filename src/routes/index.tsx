@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight, Camera, Sparkles, Send } from "lucide-react";
 import { LASH_STYLES } from "@/lib/lash-styles";
 import { BrandHeader } from "@/components/BrandHeader";
+import catEyeHero from "@/assets/cat-eye-hero.jpg";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -49,16 +50,27 @@ function Landing() {
         </section>
 
         {/* Editorial hero card */}
-        <section className="rounded-3xl overflow-hidden relative aspect-[4/5] mb-14"
-          style={{ background: "linear-gradient(160deg, oklch(0.92 0.03 25), oklch(0.78 0.08 20))" }}>
-          <div className="absolute inset-0 p-6 flex flex-col justify-between">
-            <span className="text-[10px] uppercase tracking-[0.3em] text-charcoal/70">Featured · Cat Eye</span>
+        <section className="rounded-3xl overflow-hidden relative aspect-[4/5] mb-14 bg-secondary">
+          <img
+            src={catEyeHero}
+            alt="Close-up of a cat eye lash extension look on a woman's eye"
+            width={1024}
+            height={1280}
+            loading="lazy"
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+          <div
+            className="absolute inset-0"
+            style={{ background: "linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0) 40%, rgba(0,0,0,0.55) 100%)" }}
+          />
+          <div className="absolute inset-0 p-6 flex flex-col justify-between text-white">
+            <span className="text-[10px] uppercase tracking-[0.3em] text-white/80">Featured · Cat Eye</span>
             <div>
-              <h3 className="font-serif text-3xl text-charcoal">Lifted. Elongated. Effortless.</h3>
-              <p className="mt-2 text-sm text-charcoal/70 max-w-[80%]">
+              <h3 className="font-serif text-3xl">Lifted. Elongated. Effortless.</h3>
+              <p className="mt-2 text-sm text-white/80 max-w-[80%]">
                 A hand-mapped cat eye styled to your natural lash line.
               </p>
-              <Link to="/try-on" search={{ style: "cat" } as never} className="mt-4 inline-flex items-center gap-1 text-sm underline underline-offset-4 text-charcoal">
+              <Link to="/try-on" search={{ style: "cat" } as never} className="mt-4 inline-flex items-center gap-1 text-sm underline underline-offset-4">
                 Try this style <ArrowRight className="h-3 w-3" />
               </Link>
             </div>
