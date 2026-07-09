@@ -113,7 +113,14 @@ export function LashOverlay({ style, intensity, showBefore, staticImage, onReady
     }
   }
 
-  let lastDetect = 0;
+  const perfRef = useRef({
+    lastDetect: 0,
+    detectInterval: 45, // ms — adapts based on measured detection cost
+    lastDetectCost: 0,
+    ctx: null as CanvasRenderingContext2D | null,
+    sizedFor: 0,
+  });
+
   function loop() {
     const v = videoRef.current;
     const c = canvasRef.current;
@@ -122,26 +129,42 @@ export function LashOverlay({ style, intensity, showBefore, staticImage, onReady
       return;
     }
     if (v.readyState >= 2) {
-      c.width = v.videoWidth;
-      c.height = v.videoHeight;
-      const ctx = c.getContext("2d")!;
+      const perf = perfRef.current;
+      // Cap canvas backing size to 720px on the long edge — huge win on
+      // high-res phone cameras (e.g. 1920x1080 -> ~1280x720) without any
+      // visible quality loss for a full-viewport preview.
+      const vw = v.videoWidth;
+      const vh = v.videoHeight;
+      const maxEdge = 720;
+      const scale = Math.min(1, maxEdge / Math.max(vw, vh));
+      const cw = Math.round(vw * scale);
+      const ch = Math.round(vh * scale);
+      if (c.width !== cw || c.height !== ch) {
+        c.width = cw;
+        c.height = ch;
+        perf.ctx = c.getContext("2d", { alpha: false, desynchronized: true } as any);
+      }
+      const ctx = perf.ctx ?? c.getContext("2d")!;
       // mirror horizontally for selfie
-      ctx.save();
-      ctx.translate(c.width, 0);
-      ctx.scale(-1, 1);
-      ctx.drawImage(v, 0, 0, c.width, c.height);
-      ctx.restore();
+      ctx.setTransform(-1, 0, 0, 1, cw, 0);
+      ctx.drawImage(v, 0, 0, cw, ch);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-      // throttle detection to ~24fps
+      // Adaptive detection throttle: aim ~24-30 Hz on capable devices,
+      // back off when detection itself is slow to keep the render loop
+      // above 24 fps during rapid head movement.
       const now = performance.now();
-      if (now - lastDetect > 40) {
+      if (now - perf.lastDetect >= perf.detectInterval) {
+        const t0 = now;
         try {
-          const result = landmarkerRef.current.detectForVideo(v, now);
+          const result = landmarkerRef.current.detectForVideo(v, t0);
           lastLandmarksRef.current = result?.faceLandmarks?.[0] ?? null;
-        } catch (e) {
-          // ignore per-frame errors
-        }
-        lastDetect = now;
+        } catch {}
+        const cost = performance.now() - t0;
+        perf.lastDetectCost = cost;
+        // Keep detection under ~40% of frame budget; clamp 33-90ms.
+        perf.detectInterval = Math.min(90, Math.max(33, cost * 2.2));
+        perf.lastDetect = t0;
       }
 
       const landmarks = lastLandmarksRef.current;
@@ -150,7 +173,7 @@ export function LashOverlay({ style, intensity, showBefore, staticImage, onReady
       } else {
         if (status !== "tracking") setS("tracking");
         if (!showBeforeRef.current) {
-          drawOverlay(ctx, landmarks, c.width, c.height, true);
+          drawOverlay(ctx, landmarks, cw, ch, true);
         }
       }
     }
