@@ -142,7 +142,7 @@ export function LashOverlay({ style, intensity, showBefore, staticImage, onReady
       if (c.width !== cw || c.height !== ch) {
         c.width = cw;
         c.height = ch;
-        perf.ctx = c.getContext("2d", { alpha: false, desynchronized: true } as any);
+        perf.ctx = c.getContext("2d", { alpha: false, desynchronized: true } as any) as CanvasRenderingContext2D | null;
       }
       const ctx = perf.ctx ?? c.getContext("2d")!;
       // mirror horizontally for selfie
