@@ -9,7 +9,7 @@ export const Route = createFileRoute("/")({
       { title: "LashMirror — Try lashes on before you book" },
       { name: "description", content: "Preview classic, hybrid, volume, cat eye and doll eye lash extensions on your own face with a live AR try-on. Private and on-device." },
       { property: "og:title", content: "LashMirror — Try lashes on before you book" },
-      { property: "og:description", content: "See how lash extensions look on you — live, private, on-device." },
+      { property: "og:description", content: "Preview classic, hybrid, volume, cat eye and doll eye lash extensions on your own face with a live AR try-on. Private and on-device." },
     ],
   }),
   component: Landing,
