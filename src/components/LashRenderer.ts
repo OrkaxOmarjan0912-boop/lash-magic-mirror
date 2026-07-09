@@ -34,8 +34,8 @@ export function drawLashesForEye(
   ctx.save();
   ctx.strokeStyle = "rgba(15, 12, 10, 0.92)";
   ctx.lineCap = "round";
-  ctx.shadowColor = "rgba(0,0,0,0.35)";
-  ctx.shadowBlur = 1.5;
+  // shadowBlur is a major mobile perf killer (per-stroke rasterisation).
+  // Skip it — the dark stroke reads clearly against skin on its own.
 
   for (let i = 0; i < density; i++) {
     const t = i / (density - 1);
