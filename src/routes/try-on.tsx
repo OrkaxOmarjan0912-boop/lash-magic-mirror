@@ -27,8 +27,21 @@ function TryOnPage() {
   const [status, setStatus] = useState<TrackingStatus>("loading");
   const [captured, setCaptured] = useState<string | null>(null);
   const [staticImg, setStaticImg] = useState<HTMLImageElement | null>(null);
+  const [debug, setDebug] = useState(false);
   const captureApi = useRef<{ capture: () => string | null } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const tapsRef = useRef<{ n: number; last: number }>({ n: 0, last: 0 });
+
+  function handlePillTap() {
+    const now = performance.now();
+    const t = tapsRef.current;
+    t.n = now - t.last < 500 ? t.n + 1 : 1;
+    t.last = now;
+    if (t.n >= 3) {
+      t.n = 0;
+      setDebug((d) => !d);
+    }
+  }
 
   useEffect(() => {
     const preset = new URLSearchParams(window.location.search).get("style");
