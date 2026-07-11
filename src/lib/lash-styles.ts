@@ -1,5 +1,23 @@
 export type LashIntensity = "Natural" | "Glam" | "Dramatic";
 
+// Length profile shape along the lid (t: 0=inner corner, 1=outer corner)
+export type LengthProfile =
+  | { kind: "gauss"; peak: number; sigma: number; floor: number }
+  | { kind: "ramp"; start: number; end: number; floor: number }; // linearly ramps from floor at t=start to 1 at t=end
+
+export type LashRender = {
+  count: number;            // lashes per eye at intensity=1
+  lengthRatio: number;      // longest lash length as fraction of eye width at intensity=1
+  profile: LengthProfile;
+  curl: number;             // 0..1 upward hook amount
+  flare: number;            // 0..1 outward lean toward outer corner
+  thickness: number;        // multiplier on root width (px @ 720p)
+  fan: number;              // strands per position: 1 (classic) up to 4 (mega)
+  fanSpread: number;        // radial spread of fan tips (fraction of lash length)
+  rootInset: number;        // pixels to nudge root inward along normal (into lid)
+  verticalOffset: number;   // vertical calibration (fraction of eye width, negative = up)
+};
+
 export type LashStyle = {
   id: string;
   name: string;
@@ -8,19 +26,7 @@ export type LashStyle = {
   eyeShape: string;
   price: string;
   aftercare: string;
-  // Rendering parameters used by the overlay renderer to draw synthetic lashes.
-  // baseLength: fraction of eye width for the longest lash
-  // density: lashes per eye
-  // flareCenter: 0..1 position along the eye where the longest lash sits
-  // curl: curvature strength
-  // fanWidth: fan spread per lash (0 = single strand, >0 = volume fan)
-  render: {
-    baseLength: number;
-    density: number;
-    flareCenter: number;
-    curl: number;
-    fanWidth: number;
-  };
+  render: LashRender;
 };
 
 export const LASH_STYLES: LashStyle[] = [
@@ -32,7 +38,18 @@ export const LASH_STYLES: LashStyle[] = [
     eyeShape: "All eye shapes",
     price: "$95",
     aftercare: "Avoid oil-based cleansers. Refills every 2–3 weeks.",
-    render: { baseLength: 0.16, density: 40, flareCenter: 0.55, curl: 0.35, fanWidth: 0 },
+    render: {
+      count: 46,
+      lengthRatio: 0.28,
+      profile: { kind: "gauss", peak: 0.6, sigma: 0.32, floor: 0.55 },
+      curl: 0.55,
+      flare: 0.15,
+      thickness: 1.0,
+      fan: 1,
+      fanSpread: 0,
+      rootInset: 0.5,
+      verticalOffset: -0.005,
+    },
   },
   {
     id: "hybrid",
@@ -42,7 +59,18 @@ export const LASH_STYLES: LashStyle[] = [
     eyeShape: "Almond, round",
     price: "$130",
     aftercare: "Brush daily with a spoolie. Refills every 2–3 weeks.",
-    render: { baseLength: 0.19, density: 55, flareCenter: 0.55, curl: 0.4, fanWidth: 0.08 },
+    render: {
+      count: 52,
+      lengthRatio: 0.32,
+      profile: { kind: "gauss", peak: 0.6, sigma: 0.32, floor: 0.55 },
+      curl: 0.6,
+      flare: 0.2,
+      thickness: 1.1,
+      fan: 2,
+      fanSpread: 0.06,
+      rootInset: 0.5,
+      verticalOffset: -0.005,
+    },
   },
   {
     id: "volume",
@@ -52,7 +80,18 @@ export const LASH_STYLES: LashStyle[] = [
     eyeShape: "Almond, monolid",
     price: "$165",
     aftercare: "No cotton pads. Sleep on your back if possible.",
-    render: { baseLength: 0.22, density: 70, flareCenter: 0.55, curl: 0.5, fanWidth: 0.18 },
+    render: {
+      count: 56,
+      lengthRatio: 0.36,
+      profile: { kind: "gauss", peak: 0.6, sigma: 0.34, floor: 0.6 },
+      curl: 0.65,
+      flare: 0.22,
+      thickness: 1.15,
+      fan: 3,
+      fanSpread: 0.11,
+      rootInset: 0.6,
+      verticalOffset: -0.008,
+    },
   },
   {
     id: "mega",
@@ -62,7 +101,18 @@ export const LASH_STYLES: LashStyle[] = [
     eyeShape: "Round, downturned",
     price: "$195",
     aftercare: "Weekly cleanser. Refills every 2 weeks to hold density.",
-    render: { baseLength: 0.26, density: 90, flareCenter: 0.55, curl: 0.55, fanWidth: 0.28 },
+    render: {
+      count: 64,
+      lengthRatio: 0.42,
+      profile: { kind: "gauss", peak: 0.6, sigma: 0.36, floor: 0.62 },
+      curl: 0.7,
+      flare: 0.28,
+      thickness: 1.25,
+      fan: 4,
+      fanSpread: 0.16,
+      rootInset: 0.7,
+      verticalOffset: -0.01,
+    },
   },
   {
     id: "cat",
@@ -72,7 +122,18 @@ export const LASH_STYLES: LashStyle[] = [
     eyeShape: "Almond, upturned",
     price: "$150",
     aftercare: "Avoid rubbing outer corners. Refills every 3 weeks.",
-    render: { baseLength: 0.28, density: 60, flareCenter: 0.82, curl: 0.45, fanWidth: 0.12 },
+    render: {
+      count: 54,
+      lengthRatio: 0.44,
+      profile: { kind: "ramp", start: 0.25, end: 0.9, floor: 0.5 },
+      curl: 0.55,
+      flare: 0.45,
+      thickness: 1.15,
+      fan: 2,
+      fanSpread: 0.08,
+      rootInset: 0.5,
+      verticalOffset: -0.006,
+    },
   },
   {
     id: "doll",
@@ -82,7 +143,18 @@ export const LASH_STYLES: LashStyle[] = [
     eyeShape: "Almond, hooded",
     price: "$150",
     aftercare: "Sleep mask recommended. Refills every 3 weeks.",
-    render: { baseLength: 0.26, density: 65, flareCenter: 0.5, curl: 0.5, fanWidth: 0.14 },
+    render: {
+      count: 58,
+      lengthRatio: 0.4,
+      profile: { kind: "gauss", peak: 0.5, sigma: 0.22, floor: 0.55 },
+      curl: 0.7,
+      flare: 0.12,
+      thickness: 1.15,
+      fan: 3,
+      fanSpread: 0.1,
+      rootInset: 0.55,
+      verticalOffset: -0.008,
+    },
   },
 ];
 
