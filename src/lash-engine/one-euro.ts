@@ -16,9 +16,14 @@ export type OneEuroParams = {
   dCutoff: number;
 };
 
+// On-device testing found the spec's suggested starting point (minCutoff
+// 1.2, beta 0.02) read as noticeably laggy on both fast and slow head
+// motion — beta in particular was too low to let the filter open up during
+// genuine movement. These are still just a starting point; the harness
+// exposes both live so they can be tuned per-device.
 export const DEFAULT_ONE_EURO_PARAMS: OneEuroParams = {
-  minCutoff: 1.2,
-  beta: 0.02,
+  minCutoff: 2.2,
+  beta: 0.35,
   dCutoff: 1.0,
 };
 

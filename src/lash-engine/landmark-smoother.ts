@@ -12,6 +12,12 @@ import { OneEuroBuffer, DEFAULT_ONE_EURO_PARAMS, type OneEuroParams } from "./on
 import type { TrackedFrame } from "./face-tracker";
 
 const EXTRAPOLATION_CLAMP_MS = 50;
+// Beyond the clamp, decay the extrapolated offset back to the last confirmed
+// position over this window instead of holding it frozen at a stale
+// 50ms-out projection. Without this, a slow/late detection (or one noisy
+// velocity sample) left the overlay visibly "stuck" at the wrong spot until
+// the next detection arrived, rather than settling back toward ground truth.
+const EXTRAPOLATION_DECAY_MS = 120;
 /** Exported so the controller can use the same >200ms threshold for its faceLost event (spec §4). */
 export const LOSS_FADE_START_MS = 200;
 const LOSS_FADE_DURATION_MS = 150;
@@ -20,6 +26,17 @@ const LOSS_FADE_DURATION_MS = 150;
 // toward a long-stale estimate) -- gives the "instant recovery" behavior
 // required by the acceptance tests without sacrificing steady-state smoothing.
 const FILTER_RESET_GAP_MS = 250;
+// EMA weight applied to each new frame-to-frame velocity sample. A single
+// noisy detection (model jitter divided by a short inter-detection dt) could
+// otherwise produce an outlier velocity spike that gets projected forward
+// during extrapolation, reading as the overlay "drifting" off in a wrong
+// direction until the next detection corrects it. Blending damps that
+// without materially adding lag, since it still fully incorporates a
+// sustained motion within 2-3 detection frames.
+const VELOCITY_EMA_ALPHA = 0.45;
+// Hard ceiling on any single-axis velocity estimate (px/ms), as a backstop
+// against pathological outliers regardless of EMA smoothing.
+const MAX_VELOCITY_PX_PER_MS = 4;
 
 export class LandmarkSmoother {
   private filter: OneEuroBuffer;
@@ -90,8 +107,12 @@ export class LandmarkSmoother {
     const dt = wasStale ? 0 : Math.max(1, nowMs - prevIngestMs);
     if (dt > 0 && !wasStale) {
       for (let i = 0; i < TRACKED_COUNT; i++) {
-        this.velX[i] = (this.curX[i] - this.prevSmoothX[i]) / dt;
-        this.velY[i] = (this.curY[i] - this.prevSmoothY[i]) / dt;
+        let rawVx = (this.curX[i] - this.prevSmoothX[i]) / dt;
+        let rawVy = (this.curY[i] - this.prevSmoothY[i]) / dt;
+        rawVx = Math.max(-MAX_VELOCITY_PX_PER_MS, Math.min(MAX_VELOCITY_PX_PER_MS, rawVx));
+        rawVy = Math.max(-MAX_VELOCITY_PX_PER_MS, Math.min(MAX_VELOCITY_PX_PER_MS, rawVy));
+        this.velX[i] = this.velX[i] + (rawVx - this.velX[i]) * VELOCITY_EMA_ALPHA;
+        this.velY[i] = this.velY[i] + (rawVy - this.velY[i]) * VELOCITY_EMA_ALPHA;
       }
     } else {
       this.velX.fill(0);
@@ -114,10 +135,17 @@ export class LandmarkSmoother {
   sample(nowMs: number, outX: Float64Array, outY: Float64Array): number {
     if (!this.hasEverIngested) return 0;
 
-    const dt = Math.min(EXTRAPOLATION_CLAMP_MS, Math.max(0, nowMs - this.lastIngestMs));
+    const rawDt = Math.max(0, nowMs - this.lastIngestMs);
+    const dt = Math.min(EXTRAPOLATION_CLAMP_MS, rawDt);
+    // Past the clamp, fade the extrapolated offset back toward the last
+    // confirmed position instead of holding it frozen (see EXTRAPOLATION_DECAY_MS above).
+    const velScale =
+      rawDt <= EXTRAPOLATION_CLAMP_MS
+        ? 1
+        : Math.max(0, 1 - (rawDt - EXTRAPOLATION_CLAMP_MS) / EXTRAPOLATION_DECAY_MS);
     for (let i = 0; i < TRACKED_COUNT; i++) {
-      outX[i] = this.curX[i] + this.velX[i] * dt;
-      outY[i] = this.curY[i] + this.velY[i] * dt;
+      outX[i] = this.curX[i] + this.velX[i] * dt * velScale;
+      outY[i] = this.curY[i] + this.velY[i] * dt * velScale;
     }
 
     const sinceFound = nowMs - this.lastFoundMs;

@@ -4,10 +4,11 @@
 import { FaceTracker, TrackedFrame, type FaceTrackerConfig } from "./face-tracker";
 import { LandmarkSmoother, LOSS_FADE_START_MS } from "./landmark-smoother";
 import { EyeGeometry, yawForeshorten } from "./eye-geometry";
-import { LashRenderer, type RenderParams } from "./lash-renderer";
+import { LashRenderer, type RenderParams, type DebugOverrides } from "./lash-renderer";
 import { LASH_STYLES, styleById, type LashStyle } from "./styles";
 import { TRACKED_COUNT } from "./landmarks";
 import { nativeCanvasSize, applyMirrorStyle, captureComposite } from "./compositor";
+import type { OneEuroParams } from "./one-euro";
 
 export type LashEvent = "faceFound" | "faceLost" | "lowLight" | "fpsDrop";
 
@@ -21,6 +22,28 @@ export interface LashTryOnController {
   on(event: LashEvent, cb: () => void): void;
   off(event: LashEvent, cb: () => void): void;
   destroy(): void;
+}
+
+export type LashTelemetry = {
+  fps: number;
+  detectionHz: number;
+  degradeLevel: number;
+  ambientLuma: number;
+  found: boolean;
+  eyeWidth: { left: number; right: number };
+  openness: { left: number; right: number };
+};
+
+/**
+ * Tuning surface for the on-device calibration harness (spec §10) — kept
+ * separate from LashTryOnController so the app-facing contract stays exactly
+ * spec §9, with none of this bleeding into it. The concrete controller
+ * implements both; the harness accesses this side through the same instance.
+ */
+export interface LashDebugController {
+  setDebugOverrides(overrides: DebugOverrides): void;
+  setSmoothingParams(params: Partial<OneEuroParams>): void;
+  getTelemetry(): LashTelemetry;
 }
 
 export type ControllerConfig = {
@@ -37,7 +60,7 @@ const LOW_LIGHT_THRESHOLD = 0.35;
 const AMBIENT_SAMPLE_SIZE = 12;
 const AMBIENT_SAMPLE_INTERVAL_MS = 500;
 
-class LashTryOnControllerImpl implements LashTryOnController {
+class LashTryOnControllerImpl implements LashTryOnController, LashDebugController {
   private video: HTMLVideoElement | null = null;
   private overlay: HTMLCanvasElement | null = null;
   private ctx: CanvasRenderingContext2D | null = null;
@@ -76,6 +99,7 @@ class LashTryOnControllerImpl implements LashTryOnController {
   private wasLowLight = false;
 
   private lostEventEmitted = true; // starts "lost" until the first detection
+  private debugOverrides: DebugOverrides = {};
 
   private listeners: Record<LashEvent, Set<() => void>> = {
     faceFound: new Set(),
@@ -154,6 +178,26 @@ class LashTryOnControllerImpl implements LashTryOnController {
 
   setDebug(on: boolean): void {
     this.debug = on;
+  }
+
+  setDebugOverrides(overrides: DebugOverrides): void {
+    this.debugOverrides = overrides;
+  }
+
+  setSmoothingParams(params: Partial<OneEuroParams>): void {
+    this.smoother.setParams(params);
+  }
+
+  getTelemetry(): LashTelemetry {
+    return {
+      fps: this.fpsEma,
+      detectionHz: this.tracker.detectionHz,
+      degradeLevel: this.degradeLevel,
+      ambientLuma: this.ambientLuma,
+      found: this.smoother.isFound,
+      eyeWidth: { left: this.eyeLeft.eyeWidth, right: this.eyeRight.eyeWidth },
+      openness: { left: this.eyeLeft.openness, right: this.eyeRight.openness },
+    };
   }
 
   on(event: LashEvent, cb: () => void): void {
@@ -247,6 +291,7 @@ class LashTryOnControllerImpl implements LashTryOnController {
           quality,
           fadeOpacity: opacity,
           debug: this.debug,
+          debugOverrides: this.debugOverrides,
         };
         const rightParams = {
           geometry: this.eyeRight,
@@ -258,6 +303,7 @@ class LashTryOnControllerImpl implements LashTryOnController {
           quality,
           fadeOpacity: opacity,
           debug: this.debug,
+          debugOverrides: this.debugOverrides,
         };
 
         this.renderer.render({ ctx, ...leftParams });
@@ -266,8 +312,6 @@ class LashTryOnControllerImpl implements LashTryOnController {
         this.lastRightParams = rightParams;
       }
     }
-
-    if (this.debug) this.drawDebugHud(ctx, overlay);
 
     this.trackFps(nowMs);
   };
@@ -339,25 +383,10 @@ class LashTryOnControllerImpl implements LashTryOnController {
       this.goodSince = 0;
     }
   }
-
-  private drawDebugHud(ctx: CanvasRenderingContext2D, overlay: HTMLCanvasElement): void {
-    ctx.save();
-    // Debug text should read correctly even though the canvas is CSS-mirrored.
-    ctx.setTransform(-1, 0, 0, 1, overlay.width, 0);
-    ctx.font = "12px monospace";
-    ctx.fillStyle = "#00e5ff";
-    ctx.textBaseline = "top";
-    const lines = [
-      `fps ${this.fpsEma.toFixed(1)}  detect ${this.tracker.detectionHz.toFixed(1)}Hz  degrade L${this.degradeLevel}`,
-      `openness L ${this.eyeLeft.openness.toFixed(2)} R ${this.eyeRight.openness.toFixed(2)}`,
-      `eyeWidth L ${this.eyeLeft.eyeWidth.toFixed(0)}px R ${this.eyeRight.eyeWidth.toFixed(0)}px`,
-      `ambient ${this.ambientLuma.toFixed(2)}  found ${this.smoother.isFound}`,
-    ];
-    lines.forEach((line, i) => ctx.fillText(line, 10, 10 + i * 16));
-    ctx.restore();
-  }
 }
 
-export function createLashTryOnController(config?: ControllerConfig): LashTryOnController {
+export function createLashTryOnController(
+  config?: ControllerConfig,
+): LashTryOnController & LashDebugController {
   return new LashTryOnControllerImpl(config);
 }

@@ -18,20 +18,31 @@ const LASH_COLOR_B = 0x1a;
 // Reference eye width the style.rootWidth / tip-width constants are calibrated
 // against (spec §6.1: "~2.5px @ 720p"), so strokes scale with actual eye size.
 const W_REF = 110;
-const TIP_WIDTH_REF = 0.3;
+const TIP_WIDTH_REF = 0.6;
 
 const BEZIER_SAMPLES = 6; // resolution of the tapered polygon per lash
-const MAX_FAN_PER_CLUSTER = 4;
+const MAX_FAN_PER_CLUSTER = 5;
 
 const LOW_LIGHT_THRESHOLD = 0.35;
+
+// Live-tunable overrides, wired up from the debug harness (spec §10 —
+// "per-style calibration offsets adjustable via config... without rebuild",
+// extended here to cover the params on-device testing needed to dial in).
+export type DebugOverrides = {
+  yOffset?: number; // replaces style.calibration.yOffset (fraction of eye width)
+  rootInset?: number; // replaces style.calibration.rootInset
+  rootWidthMul?: number; // multiplies style.rootWidth
+  alphaFloorOverride?: number; // replaces the computed ambient-based alpha floor
+  lashCountMul?: number; // multiplies style.lashCount when building slots
+};
 
 type LashSlots = {
   count: number;
   t: Float64Array; // spline parameter [0,1], shared root position within a cluster
   fanAngle: Float64Array; // extra rotation (radians) for this strand within its cluster
-  lengthJitter: Float64Array; // multiplier, 1 +/- 8%
-  angleJitter: Float64Array; // radians, small per-lash direction noise
-  alphaJitter: Float64Array; // 0.75-0.95, stable per lash
+  lengthJitter: Float64Array; // multiplier, session-stable per lash
+  angleJitter: Float64Array; // radians, session-stable per-lash direction noise
+  alphaJitter: Float64Array; // stable per lash, so strokes don't shimmer
 };
 
 function hash01(seed: number): number {
@@ -39,11 +50,16 @@ function hash01(seed: number): number {
   return s - Math.floor(s);
 }
 
-function buildSlots(style: LashStyle, sessionSeed: number, sideSalt: number): LashSlots {
-  const n = style.lashCount;
+function buildSlots(
+  style: LashStyle,
+  sessionSeed: number,
+  sideSalt: number,
+  lashCountMul: number,
+): LashSlots {
+  const n = Math.max(4, Math.round(style.lashCount * lashCountMul));
   const fansPerCluster = Math.min(
     MAX_FAN_PER_CLUSTER,
-    Math.max(1, 1 + Math.round(style.clustering * 3)),
+    Math.max(1, 1 + Math.round(style.clustering * 4)),
   );
   const numClusters = Math.max(1, Math.ceil(n / fansPerCluster));
   const total = numClusters * fansPerCluster;
@@ -72,9 +88,12 @@ function buildSlots(style: LashStyle, sessionSeed: number, sideSalt: number): La
       const fanFrac = fansPerCluster === 1 ? 0 : f / (fansPerCluster - 1) - 0.5;
       slots.t[i] = clusterT;
       slots.fanAngle[i] = fanFrac * maxFanSpreadRad;
-      slots.lengthJitter[i] = 1 + 0.08 * (hash01(baseSeed * 7.7 + f * 1.91) * 2 - 1);
-      slots.angleJitter[i] = 0.08 * (hash01(baseSeed * 11.3 + f * 2.63) * 2 - 1);
-      slots.alphaJitter[i] = 0.75 + 0.2 * hash01(baseSeed * 5.13 + f * 3.37);
+      // Wider spread than the spec's literal +/-8% (on-device feedback: the
+      // set read as a single rigid stamped shape at 8%; this is deliberately
+      // more organic-looking).
+      slots.lengthJitter[i] = 1 + 0.22 * (hash01(baseSeed * 7.7 + f * 1.91) * 2 - 1);
+      slots.angleJitter[i] = 0.16 * (hash01(baseSeed * 11.3 + f * 2.63) * 2 - 1);
+      slots.alphaJitter[i] = 0.88 + 0.12 * hash01(baseSeed * 5.13 + f * 3.37);
       i++;
     }
   }
@@ -111,6 +130,7 @@ export type RenderParams = {
   /** Overall opacity multiplier from tracking-loss fade (spec §4). */
   fadeOpacity: number;
   debug: boolean;
+  debugOverrides?: DebugOverrides;
 };
 
 export class LashRenderer {
@@ -128,11 +148,11 @@ export class LashRenderer {
     this.sessionSeed = sessionSeed;
   }
 
-  private slotsFor(side: "left" | "right", style: LashStyle): LashSlots {
-    const key = `${side}:${style.id}:${style.lashCount}:${style.clustering}:${style.densityJitter}`;
+  private slotsFor(side: "left" | "right", style: LashStyle, lashCountMul: number): LashSlots {
+    const key = `${side}:${style.id}:${style.lashCount}:${style.clustering}:${style.densityJitter}:${lashCountMul}`;
     let slots = this.cache.get(key);
     if (!slots) {
-      slots = buildSlots(style, this.sessionSeed, side === "left" ? 0 : 1000);
+      slots = buildSlots(style, this.sessionSeed, side === "left" ? 0 : 1000, lashCountMul);
       this.cache.set(key, slots);
     }
     return slots;
@@ -142,6 +162,7 @@ export class LashRenderer {
     const { ctx, geometry, style, intensity } = p;
     if (!geometry.valid) return;
 
+    const overrides = p.debugOverrides;
     const resScale = geometry.eyeWidth / W_REF;
     const openness = geometry.openness;
 
@@ -149,8 +170,9 @@ export class LashRenderer {
       p.ambientLuma < LOW_LIGHT_THRESHOLD
         ? Math.min(1, (LOW_LIGHT_THRESHOLD - p.ambientLuma) / LOW_LIGHT_THRESHOLD)
         : 0;
-    const alphaFloor = 0.75 + 0.15 * darkFactor; // -> up to 0.9 in low light
-    const shadowAlphaBase = 0.2 + 0.1 * darkFactor; // -> up to 0.3 in low light
+    const computedAlphaFloor = 0.85 + 0.1 * darkFactor; // -> up to 0.95 in low light
+    const alphaFloor = overrides?.alphaFloorOverride ?? computedAlphaFloor;
+    const shadowAlphaBase = 0.35 + 0.12 * darkFactor; // -> up to ~0.47 in low light
 
     // Blink envelope (spec §6.4), continuous everywhere:
     //  - curl scales directly with openness
@@ -162,11 +184,15 @@ export class LashRenderer {
 
     this.drawShadow(ctx, geometry, shadowAlphaBase * blinkOpacityMul * p.fadeOpacity, resScale);
 
-    const slots = this.slotsFor(geometry.side, style);
-    const drawCount = Math.max(1, Math.round(slots.count * Math.min(1, Math.max(0, p.quality))));
+    const quality = Math.min(1, Math.max(0, p.quality));
+    const slots = this.slotsFor(geometry.side, style, overrides?.lashCountMul ?? 1);
+    const drawCount = Math.max(1, Math.round(slots.count * quality));
     // When degraded, drop a stride of lashes rather than always chopping off
     // one end of the lid, so the reduction reads as thinner, not lopsided.
     const stride = slots.count / drawCount;
+    // Skip the feathered-edge halo pass under FPS degradation (perf ladder);
+    // full quality always draws it for the softer, hair-like edge.
+    const feather = quality >= 1;
 
     ctx.fillStyle = `rgb(${LASH_COLOR_R}, ${LASH_COLOR_G}, ${LASH_COLOR_B})`;
 
@@ -181,6 +207,8 @@ export class LashRenderer {
         alphaFloor,
         blinkOpacityMul,
         fadeOpacity: p.fadeOpacity,
+        feather,
+        overrides,
       });
     }
 
@@ -225,14 +253,18 @@ export class LashRenderer {
       alphaFloor: number;
       blinkOpacityMul: number;
       fadeOpacity: number;
+      feather: boolean;
+      overrides?: DebugOverrides;
     },
   ): void {
     const t = slots.t[i];
     const s = this.sampleScratch;
     sampleSpline(geometry, t, s);
 
-    const rootInset = style.calibration.rootInset * opts.resScale;
-    const yOffset = style.calibration.yOffset * geometry.eyeWidth;
+    const rootInsetBase = opts.overrides?.rootInset ?? style.calibration.rootInset;
+    const yOffsetBase = opts.overrides?.yOffset ?? style.calibration.yOffset;
+    const rootInset = rootInsetBase * opts.resScale;
+    const yOffset = yOffsetBase * geometry.eyeWidth;
 
     // Base outward direction: blend the spline's local normal with the eye's
     // own up-axis so lashes stay anatomically "up" even on sharply curved
@@ -297,8 +329,9 @@ export class LashRenderer {
     const ctrlX = rootX + rotX * length * 0.55 + geometry.upX * curlAmt * length * 0.4;
     const ctrlY = rootY + rotY * length * 0.55 + geometry.upY * curlAmt * length * 0.4;
 
-    const rootHalfWidth = (style.rootWidth * opts.resScale) / 2;
-    const tipHalfWidth = (TIP_WIDTH_REF * opts.resScale) / 2;
+    const rootWidthMul = opts.overrides?.rootWidthMul ?? 1;
+    const rootHalfWidth = (style.rootWidth * rootWidthMul * opts.resScale) / 2;
+    const tipHalfWidth = (TIP_WIDTH_REF * rootWidthMul * opts.resScale) / 2;
 
     const alpha =
       Math.max(opts.alphaFloor, slots.alphaJitter[i]) * opts.blinkOpacityMul * opts.fadeOpacity;
@@ -314,10 +347,55 @@ export class LashRenderer {
       rootHalfWidth,
       tipHalfWidth,
       alpha,
+      opts.feather,
     );
   }
 
   private fillTaperedLash(
+    ctx: CanvasRenderingContext2D,
+    rootX: number,
+    rootY: number,
+    ctrlX: number,
+    ctrlY: number,
+    tipX: number,
+    tipY: number,
+    rootHalfWidth: number,
+    tipHalfWidth: number,
+    alpha: number,
+    feather: boolean,
+  ): void {
+    // Feathered edge (spec §6.3): a wider, low-alpha halo pass underneath the
+    // crisp core so the tapered polygon's silhouette reads as soft/hair-like
+    // instead of a hard-edged printed shape. Skipped under FPS degradation.
+    if (feather) {
+      this.fillTaperedPolygon(
+        ctx,
+        rootX,
+        rootY,
+        ctrlX,
+        ctrlY,
+        tipX,
+        tipY,
+        rootHalfWidth + 0.9,
+        tipHalfWidth + 0.5,
+        alpha * 0.32,
+      );
+    }
+    this.fillTaperedPolygon(
+      ctx,
+      rootX,
+      rootY,
+      ctrlX,
+      ctrlY,
+      tipX,
+      tipY,
+      rootHalfWidth,
+      tipHalfWidth,
+      alpha,
+    );
+  }
+
+  private fillTaperedPolygon(
     ctx: CanvasRenderingContext2D,
     rootX: number,
     rootY: number,

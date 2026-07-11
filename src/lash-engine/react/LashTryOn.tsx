@@ -4,7 +4,13 @@
 // talks to the engine exclusively through this component's props and the
 // imperative handle it exposes.
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { createLashTryOnController, type LashTryOnController } from "../index";
+import {
+  createLashTryOnController,
+  type LashTryOnController,
+  type LashDebugController,
+} from "../index";
+
+type FullController = LashTryOnController & LashDebugController;
 
 export type LashTryOnStatus = "loading" | "ready" | "error";
 
@@ -24,7 +30,7 @@ export type LashTryOnProps = {
 
 export type LashTryOnHandle = {
   capture: () => Promise<Blob>;
-  controller: LashTryOnController | null;
+  controller: FullController | null;
 };
 
 export const LashTryOn = forwardRef<LashTryOnHandle, LashTryOnProps>(function LashTryOn(
@@ -45,7 +51,7 @@ export const LashTryOn = forwardRef<LashTryOnHandle, LashTryOnProps>(function La
 ) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
-  const controllerRef = useRef<LashTryOnController | null>(null);
+  const controllerRef = useRef<FullController | null>(null);
   const [status, setStatus] = useState<LashTryOnStatus>("loading");
 
   useEffect(() => {

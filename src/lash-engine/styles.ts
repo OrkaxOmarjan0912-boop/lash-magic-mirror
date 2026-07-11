@@ -23,24 +23,31 @@ export type LashStyle = {
   calibration: { yOffset: number; rootInset: number };
 };
 
-type GaussParams = { peak: number; sigma: number; floor: number };
-function gaussProfile({ peak, sigma, floor }: GaussParams): (t: number) => number {
+// `max` is the *absolute* peak length as a fraction of eye width (spec §6.2
+// suggests ~0.25-0.45 for a natural-to-glam range; Mega Volume runs longer).
+// `floor` is relative to max — e.g. floor=0.5 means the shortest lashes in
+// the bank are half the peak length. A previous version of this file treated
+// `floor` as the absolute minimum with the gaussian peaking at a fraction of
+// 1.0 (i.e. up to 100% of eye width) — that was the bug that made lashes
+// reach up into the eyebrows on-device; this version peaks at `max` instead.
+type GaussParams = { peak: number; sigma: number; floor: number; max: number };
+function gaussProfile({ peak, sigma, floor, max }: GaussParams): (t: number) => number {
   return (t: number) => {
     const d = (t - peak) / sigma;
     const g = Math.exp(-d * d);
-    return floor + (1 - floor) * g;
+    return max * (floor + (1 - floor) * g);
   };
 }
 
-type RampParams = { start: number; end: number; floor: number };
-function rampProfile({ start, end, floor }: RampParams): (t: number) => number {
+type RampParams = { start: number; end: number; min: number; max: number };
+function rampProfile({ start, end, min, max }: RampParams): (t: number) => number {
   return (t: number) => {
-    if (t <= start) return floor;
-    if (t >= end) return 1;
+    if (t <= start) return min;
+    if (t >= end) return max;
     const u = (t - start) / (end - start);
     // Smoothstep, so the ramp doesn't kink visibly where it starts.
     const s = u * u * (3 - 2 * u);
-    return floor + (1 - floor) * s;
+    return min + (max - min) * s;
   };
 }
 
@@ -49,80 +56,85 @@ function flareProfile({ max, power }: FlareParams): (t: number) => number {
   return (t: number) => max * Math.pow(Math.max(0, t), power);
 }
 
+// Parameter spread between styles is deliberately exaggerated (per on-device
+// feedback: the first pass was ~3x too subtle to read as distinct styles at
+// a glance) — lashCount, length, clustering, and rootWidth all vary sharply.
 export const LASH_STYLES: LashStyle[] = [
   {
     id: "classic",
     name: "Classic",
-    lashCount: 46,
-    lengthProfile: gaussProfile({ peak: 0.58, sigma: 0.34, floor: 0.58 }),
-    curl: 0.5,
-    flare: flareProfile({ max: 0.16, power: 1.4 }),
+    lashCount: 40,
+    lengthProfile: gaussProfile({ peak: 0.58, sigma: 0.34, floor: 0.55, max: 0.3 }),
+    curl: 0.4,
+    flare: flareProfile({ max: 0.12, power: 1.4 }),
     clustering: 0,
-    densityJitter: 0.08,
-    rootWidth: 2.6,
-    calibration: { yOffset: -0.006, rootInset: 0.4 },
+    densityJitter: 0.1,
+    rootWidth: 3.2,
+    calibration: { yOffset: 0, rootInset: 0.4 },
   },
   {
     id: "hybrid",
     name: "Hybrid",
-    lashCount: 54,
-    lengthProfile: gaussProfile({ peak: 0.58, sigma: 0.34, floor: 0.58 }),
-    curl: 0.58,
-    flare: flareProfile({ max: 0.22, power: 1.3 }),
-    clustering: 0.35,
-    densityJitter: 0.1,
-    rootWidth: 2.3,
-    calibration: { yOffset: -0.007, rootInset: 0.45 },
+    lashCount: 55,
+    lengthProfile: gaussProfile({ peak: 0.58, sigma: 0.34, floor: 0.5, max: 0.36 }),
+    curl: 0.5,
+    flare: flareProfile({ max: 0.18, power: 1.3 }),
+    clustering: 0.3,
+    densityJitter: 0.12,
+    rootWidth: 2.8,
+    calibration: { yOffset: 0, rootInset: 0.45 },
   },
   {
     id: "volume",
     name: "Volume",
-    lashCount: 40,
-    lengthProfile: gaussProfile({ peak: 0.58, sigma: 0.36, floor: 0.6 }),
-    curl: 0.65,
-    flare: flareProfile({ max: 0.26, power: 1.2 }),
-    clustering: 0.65,
-    densityJitter: 0.12,
-    rootWidth: 1.9,
-    calibration: { yOffset: -0.009, rootInset: 0.55 },
+    lashCount: 70,
+    lengthProfile: gaussProfile({ peak: 0.58, sigma: 0.36, floor: 0.5, max: 0.42 }),
+    curl: 0.6,
+    flare: flareProfile({ max: 0.22, power: 1.2 }),
+    clustering: 0.6,
+    densityJitter: 0.14,
+    rootWidth: 2.2,
+    calibration: { yOffset: 0, rootInset: 0.55 },
   },
   {
     id: "mega",
     name: "Mega Volume",
-    lashCount: 36,
-    lengthProfile: gaussProfile({ peak: 0.58, sigma: 0.38, floor: 0.64 }),
-    curl: 0.72,
-    flare: flareProfile({ max: 0.32, power: 1.1 }),
-    clustering: 0.9,
-    densityJitter: 0.14,
-    rootWidth: 1.6,
-    calibration: { yOffset: -0.011, rootInset: 0.65 },
+    lashCount: 90,
+    lengthProfile: gaussProfile({ peak: 0.58, sigma: 0.38, floor: 0.55, max: 0.52 }),
+    curl: 0.75,
+    flare: flareProfile({ max: 0.28, power: 1.1 }),
+    clustering: 0.95,
+    densityJitter: 0.16,
+    rootWidth: 1.8,
+    calibration: { yOffset: 0, rootInset: 0.65 },
   },
   {
     id: "cat-eye",
     name: "Cat Eye",
-    lashCount: 50,
-    // Ramps up over the outer third (t in [~0.66, 1]) per spec §6.2.
-    lengthProfile: rampProfile({ start: 0.62, end: 0.96, floor: 0.5 }),
-    curl: 0.5,
-    flare: flareProfile({ max: 0.5, power: 1.6 }),
-    clustering: 0.3,
+    lashCount: 55,
+    // Sharp ramp confined to the outer ~30% (t in [0.68, 0.97]) per spec §6.2 —
+    // short and even everywhere else so the outer "flick" reads unmistakably.
+    lengthProfile: rampProfile({ start: 0.68, end: 0.97, min: 0.2, max: 0.55 }),
+    curl: 0.45,
+    flare: flareProfile({ max: 0.6, power: 2.2 }),
+    clustering: 0.35,
     densityJitter: 0.1,
-    rootWidth: 2.2,
-    calibration: { yOffset: -0.006, rootInset: 0.4 },
+    rootWidth: 2.6,
+    calibration: { yOffset: 0, rootInset: 0.4 },
   },
   {
     id: "doll-eye",
     name: "Doll Eye",
-    lashCount: 52,
-    // Peaks at t=0.5, the widest part of the eye, per spec §6.2.
-    lengthProfile: gaussProfile({ peak: 0.5, sigma: 0.24, floor: 0.55 }),
-    curl: 0.78,
-    flare: flareProfile({ max: 0.1, power: 1.4 }),
+    lashCount: 60,
+    // Narrow, tall peak centered at t=0.5 (the widest part of the eye) per
+    // spec §6.2 — noticeably rounder/shorter at the corners than Classic.
+    lengthProfile: gaussProfile({ peak: 0.5, sigma: 0.18, floor: 0.4, max: 0.4 }),
+    curl: 0.85,
+    flare: flareProfile({ max: 0.08, power: 1.4 }),
     clustering: 0.4,
     densityJitter: 0.1,
-    rootWidth: 2.2,
-    calibration: { yOffset: -0.01, rootInset: 0.45 },
+    rootWidth: 2.6,
+    calibration: { yOffset: 0, rootInset: 0.45 },
   },
 ];
 
