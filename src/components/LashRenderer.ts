@@ -262,9 +262,9 @@ export function drawLashes(rc: RenderContext) {
     const rx = p.x - normX * r.rootInset * resScale + 0;
     const ry = p.y - normY * r.rootInset * resScale + vOffset;
 
-    // Length profile — remap t so inner corner is t=0.
-    const tParam = side === "left" ? 1 - t : t; // arcResample returns inner->outer already; keep as-is
-    const profileT = tParam;
+    // arcResample walks inner->outer for both eyes (indices are ordered
+    // that way), so profile.peak=0.9 means "near outer corner" on both.
+    const profileT = t;
     const lenFactor = evalProfile(r.profile, profileT);
     const jit = 1 + 0.12 * jitter(i * 3.17 + (side === "left" ? 0.5 : 0));
     const len = baseLen * lenFactor * lengthMul * jit;
