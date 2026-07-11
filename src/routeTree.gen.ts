@@ -13,6 +13,7 @@ import { Route as TryOnRouteImport } from './routes/try-on'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as SalonConfigRouteImport } from './routes/salon-config'
 import { Route as MyLooksRouteImport } from './routes/my-looks'
+import { Route as LashLabRouteImport } from './routes/lash-lab'
 import { Route as GalleryRouteImport } from './routes/gallery'
 import { Route as BookingRouteImport } from './routes/booking'
 import { Route as IndexRouteImport } from './routes/index'
@@ -37,6 +38,11 @@ const MyLooksRoute = MyLooksRouteImport.update({
   path: '/my-looks',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LashLabRoute = LashLabRouteImport.update({
+  id: '/lash-lab',
+  path: '/lash-lab',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const GalleryRoute = GalleryRouteImport.update({
   id: '/gallery',
   path: '/gallery',
@@ -57,6 +63,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/booking': typeof BookingRoute
   '/gallery': typeof GalleryRoute
+  '/lash-lab': typeof LashLabRoute
   '/my-looks': typeof MyLooksRoute
   '/salon-config': typeof SalonConfigRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -66,6 +73,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/booking': typeof BookingRoute
   '/gallery': typeof GalleryRoute
+  '/lash-lab': typeof LashLabRoute
   '/my-looks': typeof MyLooksRoute
   '/salon-config': typeof SalonConfigRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -76,6 +84,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/booking': typeof BookingRoute
   '/gallery': typeof GalleryRoute
+  '/lash-lab': typeof LashLabRoute
   '/my-looks': typeof MyLooksRoute
   '/salon-config': typeof SalonConfigRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -87,6 +96,7 @@ export interface FileRouteTypes {
     | '/'
     | '/booking'
     | '/gallery'
+    | '/lash-lab'
     | '/my-looks'
     | '/salon-config'
     | '/sitemap.xml'
@@ -96,6 +106,7 @@ export interface FileRouteTypes {
     | '/'
     | '/booking'
     | '/gallery'
+    | '/lash-lab'
     | '/my-looks'
     | '/salon-config'
     | '/sitemap.xml'
@@ -105,6 +116,7 @@ export interface FileRouteTypes {
     | '/'
     | '/booking'
     | '/gallery'
+    | '/lash-lab'
     | '/my-looks'
     | '/salon-config'
     | '/sitemap.xml'
@@ -115,6 +127,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BookingRoute: typeof BookingRoute
   GalleryRoute: typeof GalleryRoute
+  LashLabRoute: typeof LashLabRoute
   MyLooksRoute: typeof MyLooksRoute
   SalonConfigRoute: typeof SalonConfigRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
@@ -151,6 +164,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MyLooksRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/lash-lab': {
+      id: '/lash-lab'
+      path: '/lash-lab'
+      fullPath: '/lash-lab'
+      preLoaderRoute: typeof LashLabRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/gallery': {
       id: '/gallery'
       path: '/gallery'
@@ -179,6 +199,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BookingRoute: BookingRoute,
   GalleryRoute: GalleryRoute,
+  LashLabRoute: LashLabRoute,
   MyLooksRoute: MyLooksRoute,
   SalonConfigRoute: SalonConfigRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
@@ -187,3 +208,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
