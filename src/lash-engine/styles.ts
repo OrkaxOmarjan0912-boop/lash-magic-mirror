@@ -59,59 +59,69 @@ function flareProfile({ max, power }: FlareParams): (t: number) => number {
 // Parameter spread between styles is deliberately exaggerated (per on-device
 // feedback: the first pass was ~3x too subtle to read as distinct styles at
 // a glance) — lashCount, length, clustering, and rootWidth all vary sharply.
+//
+// lashCount and rootWidth below have the shipped tuning multipliers
+// (lashCountMultiplier 0.95, rootWidthMultiplier 0.65) baked directly in, so
+// they're the real defaults with zero debug overrides active. calibration
+// is now a shared baseline across all six styles rather than varying per
+// style (rootInset 2.0; yOffset 0 — see estimateAutoYOffset() in
+// eye-geometry.ts, which supplies the actual per-face anchor and treats this
+// field as a per-style delta on top of it, currently unused).
+const ROOT_INSET_DEFAULT = 2.0;
+
 export const LASH_STYLES: LashStyle[] = [
   {
     id: "classic",
     name: "Classic",
-    lashCount: 40,
+    lashCount: 38,
     lengthProfile: gaussProfile({ peak: 0.58, sigma: 0.34, floor: 0.55, max: 0.3 }),
     curl: 0.4,
     flare: flareProfile({ max: 0.12, power: 1.4 }),
     clustering: 0,
     densityJitter: 0.1,
-    rootWidth: 3.2,
-    calibration: { yOffset: 0, rootInset: 0.4 },
+    rootWidth: 2.08,
+    calibration: { yOffset: 0, rootInset: ROOT_INSET_DEFAULT },
   },
   {
     id: "hybrid",
     name: "Hybrid",
-    lashCount: 55,
+    lashCount: 52,
     lengthProfile: gaussProfile({ peak: 0.58, sigma: 0.34, floor: 0.5, max: 0.36 }),
     curl: 0.5,
     flare: flareProfile({ max: 0.18, power: 1.3 }),
     clustering: 0.3,
     densityJitter: 0.12,
-    rootWidth: 2.8,
-    calibration: { yOffset: 0, rootInset: 0.45 },
+    rootWidth: 1.82,
+    calibration: { yOffset: 0, rootInset: ROOT_INSET_DEFAULT },
   },
   {
     id: "volume",
     name: "Volume",
-    lashCount: 70,
+    lashCount: 67,
     lengthProfile: gaussProfile({ peak: 0.58, sigma: 0.36, floor: 0.5, max: 0.42 }),
     curl: 0.6,
     flare: flareProfile({ max: 0.22, power: 1.2 }),
     clustering: 0.6,
     densityJitter: 0.14,
-    rootWidth: 2.2,
-    calibration: { yOffset: 0, rootInset: 0.55 },
+    rootWidth: 1.43,
+    calibration: { yOffset: 0, rootInset: ROOT_INSET_DEFAULT },
   },
   {
     id: "mega",
     name: "Mega Volume",
-    lashCount: 90,
+    lashCount: 86,
     lengthProfile: gaussProfile({ peak: 0.58, sigma: 0.38, floor: 0.55, max: 0.52 }),
     curl: 0.75,
     flare: flareProfile({ max: 0.28, power: 1.1 }),
     clustering: 0.95,
     densityJitter: 0.16,
-    rootWidth: 1.8,
-    calibration: { yOffset: 0, rootInset: 0.65 },
+    rootWidth: 1.17,
+    calibration: { yOffset: 0, rootInset: ROOT_INSET_DEFAULT },
   },
   {
     id: "cat-eye",
     name: "Cat Eye",
-    lashCount: 55,
+    lashCount: 52,
     // Sharp ramp confined to the outer ~30% (t in [0.68, 0.97]) per spec §6.2 —
     // short and even everywhere else so the outer "flick" reads unmistakably.
     lengthProfile: rampProfile({ start: 0.68, end: 0.97, min: 0.2, max: 0.55 }),
@@ -119,13 +129,13 @@ export const LASH_STYLES: LashStyle[] = [
     flare: flareProfile({ max: 0.6, power: 2.2 }),
     clustering: 0.35,
     densityJitter: 0.1,
-    rootWidth: 2.6,
-    calibration: { yOffset: 0, rootInset: 0.4 },
+    rootWidth: 1.69,
+    calibration: { yOffset: 0, rootInset: ROOT_INSET_DEFAULT },
   },
   {
     id: "doll-eye",
     name: "Doll Eye",
-    lashCount: 60,
+    lashCount: 57,
     // Narrow, tall peak centered at t=0.5 (the widest part of the eye) per
     // spec §6.2 — noticeably rounder/shorter at the corners than Classic.
     lengthProfile: gaussProfile({ peak: 0.5, sigma: 0.18, floor: 0.4, max: 0.4 }),
@@ -133,8 +143,8 @@ export const LASH_STYLES: LashStyle[] = [
     flare: flareProfile({ max: 0.08, power: 1.4 }),
     clustering: 0.4,
     densityJitter: 0.1,
-    rootWidth: 2.6,
-    calibration: { yOffset: 0, rootInset: 0.45 },
+    rootWidth: 1.69,
+    calibration: { yOffset: 0, rootInset: ROOT_INSET_DEFAULT },
   },
 ];
 

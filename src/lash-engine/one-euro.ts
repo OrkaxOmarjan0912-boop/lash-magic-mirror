@@ -16,14 +16,15 @@ export type OneEuroParams = {
   dCutoff: number;
 };
 
-// On-device testing found the spec's suggested starting point (minCutoff
-// 1.2, beta 0.02) read as noticeably laggy on both fast and slow head
-// motion — beta in particular was too low to let the filter open up during
-// genuine movement. These are still just a starting point; the harness
-// exposes both live so they can be tuned per-device.
+// Shipped defaults, locked in from on-device tuning: a low minCutoff gives
+// heavy smoothing at rest (kills jitter while still), a high beta lets the
+// filter open up aggressively once the landmarks are actually moving. Both
+// were at (or very near) the debug panel's slider bounds when tuned — see
+// the harness for the current, widened ranges before assuming these are the
+// true optimum. The harness exposes both live for further per-device tuning.
 export const DEFAULT_ONE_EURO_PARAMS: OneEuroParams = {
-  minCutoff: 2.2,
-  beta: 0.35,
+  minCutoff: 0.2,
+  beta: 1.2,
   dCutoff: 1.0,
 };
 

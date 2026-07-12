@@ -35,16 +35,26 @@ type Tuning = {
   alphaFloor: number;
 };
 
+// Shipped defaults, locked in from on-device tuning (2026-07). yOffset here
+// is only the *manual-override* value shown when autoYOffset is switched
+// off below — the real shipped default is per-face auto-calibration (see
+// estimateAutoYOffset in eye-geometry.ts), which this same 0.053 seeds as
+// its fallback. lashCountMul/rootWidthMul reset to 1 (no additional
+// multiplier) because their tuned values (0.95 / 0.65) are now baked
+// directly into each style's lashCount/rootWidth in styles.ts.
 const DEFAULT_TUNING: Tuning = {
-  yOffset: 0,
-  rootInset: 0.5,
-  minCutoff: 2.2,
-  beta: 0.35,
+  yOffset: 0.053,
+  rootInset: 2.0,
+  minCutoff: 0.2,
+  beta: 1.2,
   lashCountMul: 1,
   rootWidthMul: 1,
-  alphaFloor: 0.85,
+  alphaFloor: 0.53,
 };
 
+// rootInset and minCutoff were at (or effectively at) their slider bounds
+// when 2.0 / 0.2 were tuned — ranges widened here so retesting isn't capped
+// against an arbitrary UI limit.
 const SLIDER_SPECS: {
   key: keyof Tuning;
   label: string;
@@ -52,13 +62,42 @@ const SLIDER_SPECS: {
   max: number;
   step: number;
 }[] = [
-  { key: "yOffset", label: "yOffset (lid anchoring, - = up)", min: -0.08, max: 0.08, step: 0.001 },
-  { key: "rootInset", label: "rootInset (into the lid)", min: -0.5, max: 2, step: 0.01 },
-  { key: "minCutoff", label: "minCutoff (One Euro, Hz)", min: 0.2, max: 6, step: 0.05 },
-  { key: "beta", label: "beta (One Euro, speed coeff)", min: 0, max: 1.5, step: 0.01 },
-  { key: "lashCountMul", label: "lash count multiplier", min: 0.3, max: 2.5, step: 0.05 },
-  { key: "rootWidthMul", label: "root width multiplier", min: 0.3, max: 3, step: 0.05 },
-  { key: "alphaFloor", label: "alpha floor", min: 0.3, max: 1, step: 0.01 },
+  {
+    key: "rootInset",
+    label: "rootInset (into the lid) — was maxed at 2, range widened",
+    min: -1,
+    max: 8,
+    step: 0.02,
+  },
+  {
+    key: "minCutoff",
+    label: "minCutoff (One Euro, Hz) — was mined at 0.2, range widened",
+    min: 0.02,
+    max: 6,
+    step: 0.02,
+  },
+  { key: "beta", label: "beta (One Euro, speed coeff)", min: 0, max: 2, step: 0.01 },
+  {
+    key: "lashCountMul",
+    label: "lash count multiplier (on top of shipped default)",
+    min: 0.3,
+    max: 2.5,
+    step: 0.05,
+  },
+  {
+    key: "rootWidthMul",
+    label: "root width multiplier (on top of shipped default)",
+    min: 0.3,
+    max: 3,
+    step: 0.05,
+  },
+  {
+    key: "alphaFloor",
+    label: "alpha floor (good-light baseline; low light still ramps to 0.9)",
+    min: 0.2,
+    max: 1,
+    step: 0.01,
+  },
 ];
 
 export function HarnessApp() {
@@ -70,22 +109,26 @@ export function HarnessApp() {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [captureUrl, setCaptureUrl] = useState<string | null>(null);
   const [tuning, setTuning] = useState<Tuning>(DEFAULT_TUNING);
+  const [autoYOffset, setAutoYOffset] = useState(true);
   const [telemetry, setTelemetry] = useState<LashTelemetry | null>(null);
   const handleRef = useRef<LashTryOnHandle>(null);
 
-  // Push tuning changes straight into the engine's debug surface.
+  // Push tuning changes straight into the engine's debug surface. yOffset is
+  // only sent as an override when auto-calibration is switched off — leaving
+  // it out of the object lets the engine's per-face estimate run instead, so
+  // "auto" mode is actually exercised here, not just the manual override.
   useEffect(() => {
     const controller = handleRef.current?.controller;
     if (!controller) return;
     controller.setDebugOverrides({
-      yOffset: tuning.yOffset,
+      ...(autoYOffset ? {} : { yOffset: tuning.yOffset }),
       rootInset: tuning.rootInset,
       rootWidthMul: tuning.rootWidthMul,
       alphaFloorOverride: tuning.alphaFloor,
       lashCountMul: tuning.lashCountMul,
     });
     controller.setSmoothingParams({ minCutoff: tuning.minCutoff, beta: tuning.beta });
-  }, [tuning, status]);
+  }, [tuning, autoYOffset, status]);
 
   // Poll telemetry for the readout (fps / detection Hz / degrade level / per-eye stats).
   useEffect(() => {
@@ -229,6 +272,46 @@ export function HarnessApp() {
                 `eyeWidth L ${telemetry.eyeWidth.left.toFixed(0)}px R ${telemetry.eyeWidth.right.toFixed(0)}px  ambient ${telemetry.ambientLuma.toFixed(2)}`
               : "waiting for telemetry…"}
           </div>
+
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              marginBottom: 6,
+              color: "#ffd166",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={autoYOffset}
+              onChange={(e) => setAutoYOffset(e.target.checked)}
+            />
+            auto-calibrate yOffset per face (shipped default — uncheck to override manually)
+          </label>
+          <label
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 2,
+              marginBottom: 6,
+              opacity: autoYOffset ? 0.4 : 1,
+            }}
+          >
+            <span>
+              yOffset manual override (lid anchoring, - = up): {tuning.yOffset.toFixed(3)}
+            </span>
+            <input
+              type="range"
+              min={-0.08}
+              max={0.08}
+              step={0.001}
+              value={tuning.yOffset}
+              disabled={autoYOffset}
+              onChange={(e) => setTuningValue("yOffset", parseFloat(e.target.value))}
+            />
+          </label>
+
           {SLIDER_SPECS.map((spec) => (
             <label
               key={spec.key}
@@ -248,7 +331,10 @@ export function HarnessApp() {
             </label>
           ))}
           <button
-            onClick={() => setTuning(DEFAULT_TUNING)}
+            onClick={() => {
+              setTuning(DEFAULT_TUNING);
+              setAutoYOffset(true);
+            }}
             style={{
               padding: "6px 10px",
               fontSize: 11,

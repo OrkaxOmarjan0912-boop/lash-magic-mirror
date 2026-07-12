@@ -60,6 +60,15 @@ export class EyeGeometry {
   private opennessRollingMax = OPENNESS_ROLLING_MAX_FLOOR;
   private lastUpdateMs = 0;
 
+  /**
+   * This eye's own natural (session-max) open-eye aspect ratio (gap/eyeWidth).
+   * Exposed as a per-face anatomy proxy for yOffset auto-calibration —
+   * see estimateAutoYOffset() below.
+   */
+  get restingAspectRatio(): number {
+    return this.opennessRollingMax;
+  }
+
   constructor(side: EyeSide) {
     this.side = side;
     const idx = upperLid(side);
@@ -268,4 +277,43 @@ function catmullRomEval(
 export function yawForeshorten(eyeWidth: number, otherEyeWidth: number): number {
   if (otherEyeWidth <= eyeWidth) return 1;
   return Math.max(YAW_FORESHORTEN_FLOOR, eyeWidth / otherEyeWidth);
+}
+
+// The 0.053 fallback was tuned on-device against one face; this is the
+// tester's own resting aspect ratio (gap/eyeWidth when fully open), used as
+// the reference point the scaling below is anchored to.
+export const AUTO_Y_OFFSET_FALLBACK = 0.053;
+const REFERENCE_ASPECT_RATIO = 0.32;
+// Bounds how far the scale can move from 1.0, so a noisy or atypical ratio
+// (partial occlusion, extreme angle) can't blow the offset up or collapse it.
+const AUTO_Y_OFFSET_SCALE_MIN = 0.65;
+const AUTO_Y_OFFSET_SCALE_MAX = 1.6;
+
+/**
+ * Per-face yOffset estimate, derived from geometry that's already being
+ * measured every frame — no new tracking added.
+ *
+ * Rationale (a reasoned heuristic, not a validated biometric model — we only
+ * have one calibrated data point so far): the raw MediaPipe lid contour
+ * tends to sit above the true lash margin by an amount that plausibly scales
+ * with lid anatomy — flatter/more hooded eyes have a lower natural open-eye
+ * aspect ratio (gap/eyeWidth) than round eyes, and on the one face this was
+ * tuned against, a larger downward correction was needed. This scales the
+ * single tuned fallback by the ratio of a reference aspect ratio to this
+ * eye's own session-max aspect ratio (already tracked for openness
+ * normalization), clamped to a conservative range.
+ *
+ * This needs validating across multiple lid shapes before it can be trusted
+ * as more than a starting point — that's exactly why the manual yOffset
+ * debug override always takes precedence when set.
+ */
+export function estimateAutoYOffset(
+  geometry: EyeGeometry,
+  fallback: number = AUTO_Y_OFFSET_FALLBACK,
+): number {
+  const ratio = geometry.restingAspectRatio;
+  if (!(ratio > 0)) return fallback;
+  const scale = REFERENCE_ASPECT_RATIO / ratio;
+  const clampedScale = Math.min(AUTO_Y_OFFSET_SCALE_MAX, Math.max(AUTO_Y_OFFSET_SCALE_MIN, scale));
+  return fallback * clampedScale;
 }

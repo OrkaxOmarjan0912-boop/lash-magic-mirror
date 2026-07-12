@@ -9,7 +9,7 @@
 // numbers, so steady-state rendering allocates nothing on the JS heap.
 import type { LashStyle } from "./styles";
 import type { EyeGeometry } from "./eye-geometry";
-import { SPLINE_SAMPLES } from "./eye-geometry";
+import { SPLINE_SAMPLES, estimateAutoYOffset } from "./eye-geometry";
 
 const LASH_COLOR_R = 0x1a;
 const LASH_COLOR_G = 0x1a;
@@ -24,6 +24,12 @@ const BEZIER_SAMPLES = 6; // resolution of the tapered polygon per lash
 const MAX_FAN_PER_CLUSTER = 5;
 
 const LOW_LIGHT_THRESHOLD = 0.35;
+// Shipped defaults, locked in from on-device tuning. alphaFloor is the
+// *good-light* baseline — see the low-light blend in render() below, which
+// still ramps up toward spec §6.5's 0.9 target regardless of this value, so
+// a low daylight floor here can't make lashes vanish in a dark room.
+const DEFAULT_ALPHA_FLOOR = 0.53;
+const LOW_LIGHT_ALPHA_TARGET = 0.9; // spec §6.5
 
 // Live-tunable overrides, wired up from the debug harness (spec §10 —
 // "per-style calibration offsets adjustable via config... without rebuild",
@@ -170,8 +176,12 @@ export class LashRenderer {
       p.ambientLuma < LOW_LIGHT_THRESHOLD
         ? Math.min(1, (LOW_LIGHT_THRESHOLD - p.ambientLuma) / LOW_LIGHT_THRESHOLD)
         : 0;
-    const computedAlphaFloor = 0.85 + 0.1 * darkFactor; // -> up to 0.95 in low light
-    const alphaFloor = overrides?.alphaFloorOverride ?? computedAlphaFloor;
+    // Blends from the good-light baseline (override, or the shipped default)
+    // up to spec §6.5's 0.9 low-light target as the scene darkens — the
+    // low-light guarantee holds regardless of how low the daylight baseline
+    // is tuned, rather than being replaced outright by an override.
+    const baseAlphaFloor = overrides?.alphaFloorOverride ?? DEFAULT_ALPHA_FLOOR;
+    const alphaFloor = baseAlphaFloor + (LOW_LIGHT_ALPHA_TARGET - baseAlphaFloor) * darkFactor;
     const shadowAlphaBase = 0.35 + 0.12 * darkFactor; // -> up to ~0.47 in low light
 
     // Blink envelope (spec §6.4), continuous everywhere:
@@ -262,7 +272,11 @@ export class LashRenderer {
     sampleSpline(geometry, t, s);
 
     const rootInsetBase = opts.overrides?.rootInset ?? style.calibration.rootInset;
-    const yOffsetBase = opts.overrides?.yOffset ?? style.calibration.yOffset;
+    // yOffset: an explicit debug override always wins; otherwise auto-calibrate
+    // per face from geometry already being measured (see estimateAutoYOffset),
+    // plus this style's own fine-tune delta on top (spec §6.2 calibration).
+    const yOffsetBase =
+      opts.overrides?.yOffset ?? estimateAutoYOffset(geometry) + style.calibration.yOffset;
     const rootInset = rootInsetBase * opts.resScale;
     const yOffset = yOffsetBase * geometry.eyeWidth;
 
