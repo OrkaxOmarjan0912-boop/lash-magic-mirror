@@ -1,11 +1,15 @@
+// Main try-on experience. Renders the sealed AR engine from
+// src/lash-engine/ via its React wrapper — this file only touches the
+// public LashTryOn / LashTryOnController surface and never reaches into
+// the engine internals.
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { Camera, Download, Share2, RotateCcw, Sparkles, Send, Upload, X } from "lucide-react";
-import { LashOverlay, type TrackingStatus } from "@/components/LashOverlay";
 import { StyleCarousel } from "@/components/StyleCarousel";
 import { LASH_STYLES, styleById, type LashStyle } from "@/lib/lash-styles";
 import { saveLook } from "@/lib/looks-store";
 import { BrandHeader } from "@/components/BrandHeader";
+import { LashTryOn, type LashTryOnHandle, type LashTryOnStatus } from "@/lash-engine/react/LashTryOn";
 
 export const Route = createFileRoute("/try-on")({
   head: () => ({
@@ -19,29 +23,22 @@ export const Route = createFileRoute("/try-on")({
   component: TryOnPage,
 });
 
+type Hint = null | "faceLost" | "lowLight";
+
 function TryOnPage() {
   const [permissionAsked, setPermissionAsked] = useState(false);
   const [style, setStyle] = useState<LashStyle>(LASH_STYLES[0]);
   const [intensity, setIntensity] = useState(1);
-  const [showBefore, setShowBefore] = useState(false);
-  const [status, setStatus] = useState<TrackingStatus>("loading");
+  const [comparing, setComparing] = useState(false);
+  const [status, setStatus] = useState<LashTryOnStatus>("loading");
+  const [engineError, setEngineError] = useState(false);
+  const [hint, setHint] = useState<Hint>(null);
   const [captured, setCaptured] = useState<string | null>(null);
-  const [staticImg, setStaticImg] = useState<HTMLImageElement | null>(null);
-  const [debug, setDebug] = useState(false);
-  const captureApi = useRef<{ capture: () => string | null } | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const tapsRef = useRef<{ n: number; last: number }>({ n: 0, last: 0 });
+  const [staticImg, setStaticImg] = useState<string | null>(null);
 
-  function handlePillTap() {
-    const now = performance.now();
-    const t = tapsRef.current;
-    t.n = now - t.last < 500 ? t.n + 1 : 1;
-    t.last = now;
-    if (t.n >= 3) {
-      t.n = 0;
-      setDebug((d) => !d);
-    }
-  }
+  const handleRef = useRef<LashTryOnHandle>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const lowLightSeen = useRef(false);
 
   useEffect(() => {
     const preset = new URLSearchParams(window.location.search).get("style");
@@ -51,14 +48,16 @@ function TryOnPage() {
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
-    const img = new Image();
-    img.onload = () => setStaticImg(img);
-    img.src = URL.createObjectURL(f);
+    setStaticImg(URL.createObjectURL(f));
   }
 
-  function snap() {
-    const data = captureApi.current?.capture();
-    if (data) setCaptured(data);
+  async function snap() {
+    try {
+      const blob = await handleRef.current?.capture();
+      if (blob) setCaptured(await blobToDataUrl(blob));
+    } catch (err) {
+      console.error("capture failed", err);
+    }
   }
 
   function save() {
@@ -94,20 +93,68 @@ function TryOnPage() {
     return <PermissionScreen onAllow={() => setPermissionAsked(true)} onUpload={() => fileRef.current?.click()} />;
   }
 
+  // Selfie-upload fallback view — plain photo preview when the engine
+  // can't run (permission denied / model failed to load) or the user
+  // explicitly chose to upload.
+  if (staticImg) {
+    return (
+      <div className="relative min-h-screen bg-black text-white">
+        <input ref={fileRef} type="file" accept="image/*" onChange={handleFile} className="hidden" />
+        <img src={staticImg} alt="Your selfie" className="fixed inset-0 h-full w-full object-cover" />
+        <div className="fixed top-0 inset-x-0 z-20 flex items-center justify-between px-5 pt-5">
+          <Link to="/" className="grid h-10 w-10 place-items-center rounded-full bg-black/40 backdrop-blur">
+            <X className="h-5 w-5" />
+          </Link>
+          <span className="rounded-full bg-black/40 backdrop-blur px-3 py-1 text-xs tracking-widest uppercase">Photo</span>
+          <button
+            onClick={() => { setStaticImg(null); setPermissionAsked(true); }}
+            className="grid h-10 w-10 place-items-center rounded-full bg-black/40 backdrop-blur"
+            aria-label="Use camera"
+          >
+            <Camera className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="fixed bottom-0 inset-x-0 z-20 pb-8 pt-6 px-6 bg-gradient-to-t from-black/90 to-transparent text-center">
+          <p className="text-sm text-white/80">Live preview needs a working camera. You can still browse styles and book a consultation.</p>
+          <Link
+            to="/booking"
+            search={{ style: style.id } as never}
+            className="mt-4 inline-flex rounded-full px-6 py-3 font-medium"
+            style={{ background: "var(--brand)", color: "var(--brand-foreground)" }}
+          >
+            Book a consultation
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative min-h-screen bg-black text-white">
       <input ref={fileRef} type="file" accept="image/*" onChange={handleFile} className="hidden" />
 
-      {/* Camera stage */}
+      {/* Engine camera stage */}
       <div className="fixed inset-0">
-        <LashOverlay
-          style={style}
+        <LashTryOn
+          ref={handleRef}
+          styleId={style.id}
           intensity={intensity}
-          showBefore={showBefore}
-          debug={debug}
-          staticImage={staticImg}
-          onReady={(api) => (captureApi.current = api)}
+          comparing={comparing}
+          className="h-full w-full"
           onStatus={setStatus}
+          onError={(err) => {
+            console.error("lash engine error", err);
+            setEngineError(true);
+          }}
+          onFaceFound={() => setHint((h) => (h === "faceLost" ? null : h))}
+          onFaceLost={() => setHint("faceLost")}
+          onLowLight={() => {
+            if (lowLightSeen.current) return;
+            lowLightSeen.current = true;
+            setHint("lowLight");
+            setTimeout(() => setHint((h) => (h === "lowLight" ? null : h)), 4000);
+          }}
+          onFpsDrop={() => console.info("lash engine: fps drop, engine will self-adjust")}
         />
       </div>
 
@@ -116,19 +163,11 @@ function TryOnPage() {
         <Link to="/" className="grid h-10 w-10 place-items-center rounded-full bg-black/40 backdrop-blur">
           <X className="h-5 w-5" />
         </Link>
-        <button
-          onClick={handlePillTap}
-          className={`rounded-full backdrop-blur px-3 py-1 text-xs tracking-widest uppercase ${debug ? "bg-fuchsia-500/70" : "bg-black/40"}`}
-          aria-label="Tracking status"
-        >
-          {debug && "Debug "}
-          {status === "tracking" && "Live"}
-          {status === "static" && "Photo"}
-          {status === "no-face" && "Center face"}
+        <span className="rounded-full bg-black/40 backdrop-blur px-3 py-1 text-xs tracking-widest uppercase">
+          {status === "ready" && "Live"}
           {status === "loading" && "Loading…"}
-          {status === "requesting-camera" && "Camera…"}
-          {status === "denied" && "No camera"}
-        </button>
+          {status === "error" && "Unavailable"}
+        </span>
         <button
           onClick={() => fileRef.current?.click()}
           className="grid h-10 w-10 place-items-center rounded-full bg-black/40 backdrop-blur"
@@ -138,12 +177,28 @@ function TryOnPage() {
         </button>
       </div>
 
-      {status === "denied" && (
-        <div className="fixed inset-0 grid place-items-center bg-black/70 z-30 px-6">
+      {/* Friendly guidance hints */}
+      {hint && status === "ready" && (
+        <div className="pointer-events-none fixed inset-x-0 top-24 z-20 flex justify-center px-6">
+          <div className="rounded-full bg-black/60 backdrop-blur px-4 py-2 text-sm">
+            {hint === "faceLost" && "Center your face in the frame"}
+            {hint === "lowLight" && "Move to better lighting for the best preview"}
+          </div>
+        </div>
+      )}
+
+      {/* Engine failure fallback */}
+      {(status === "error" || engineError) && (
+        <div className="fixed inset-0 grid place-items-center bg-black/80 z-30 px-6">
           <div className="max-w-sm text-center space-y-4">
-            <h2 className="font-serif text-2xl">Camera unavailable</h2>
-            <p className="text-sm text-white/70">Upload a selfie instead — we'll apply the lash preview to your photo.</p>
-            <button onClick={() => fileRef.current?.click()} className="rounded-full bg-white text-black px-6 py-3 font-medium">
+            <h2 className="font-serif text-2xl">We can't start the live preview</h2>
+            <p className="text-sm text-white/70">
+              Your camera may be blocked, or this device can't run the AR tracker. Upload a selfie instead — nothing is sent to a server either way.
+            </p>
+            <button
+              onClick={() => fileRef.current?.click()}
+              className="rounded-full bg-white text-black px-6 py-3 font-medium"
+            >
               Upload a selfie
             </button>
           </div>
@@ -171,10 +226,11 @@ function TryOnPage() {
 
         <div className="mt-3 flex items-center justify-around px-6">
           <button
-            onMouseDown={() => setShowBefore(true)}
-            onMouseUp={() => setShowBefore(false)}
-            onTouchStart={() => setShowBefore(true)}
-            onTouchEnd={() => setShowBefore(false)}
+            onMouseDown={() => setComparing(true)}
+            onMouseUp={() => setComparing(false)}
+            onMouseLeave={() => setComparing(false)}
+            onTouchStart={() => setComparing(true)}
+            onTouchEnd={() => setComparing(false)}
             className="flex flex-col items-center gap-1"
           >
             <span className="grid h-12 w-12 place-items-center rounded-full bg-white/10 backdrop-blur">
@@ -183,10 +239,10 @@ function TryOnPage() {
             <span className="text-[10px] uppercase tracking-widest">Before</span>
           </button>
 
-          <button onClick={snap} className="flex flex-col items-center gap-1">
+          <button onClick={snap} className="flex flex-col items-center gap-1" disabled={status !== "ready"}>
             <span
               className="grid h-20 w-20 place-items-center rounded-full border-4 border-white/80"
-              style={{ background: "var(--brand)" }}
+              style={{ background: "var(--brand)", opacity: status === "ready" ? 1 : 0.5 }}
             >
               <Camera className="h-7 w-7" style={{ color: "var(--brand-foreground)" }} />
             </span>
@@ -239,6 +295,15 @@ function TryOnPage() {
   );
 }
 
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result as string);
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(blob);
+  });
+}
+
 function PermissionScreen({ onAllow, onUpload }: { onAllow: () => void; onUpload: () => void }) {
   return (
     <div className="min-h-screen flex flex-col">
@@ -251,7 +316,7 @@ function PermissionScreen({ onAllow, onUpload }: { onAllow: () => void; onUpload
         <ul className="mt-6 space-y-4 text-sm">
           <li className="flex gap-3">
             <span className="mt-1 h-2 w-2 rounded-full" style={{ background: "var(--brand)" }} />
-            <span><strong>Nothing leaves your device.</strong> Face tracking runs locally in your browser.</span>
+            <span><strong>Everything happens on your phone.</strong> Your camera is never uploaded.</span>
           </li>
           <li className="flex gap-3">
             <span className="mt-1 h-2 w-2 rounded-full" style={{ background: "var(--brand)" }} />
