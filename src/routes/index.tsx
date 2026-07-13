@@ -70,7 +70,7 @@ function Landing() {
               <p className="mt-2 text-sm text-white/80 max-w-[80%]">
                 A hand-mapped cat eye styled to your natural lash line.
               </p>
-              <Link to="/try-on" search={{ style: "cat" } as never} className="mt-4 inline-flex items-center gap-1 text-sm underline underline-offset-4">
+              <Link to="/try-on" search={{ style: "cat-eye" } as never} className="mt-4 inline-flex items-center gap-1 text-sm underline underline-offset-4">
                 Try this style <ArrowRight className="h-3 w-3" />
               </Link>
             </div>

@@ -115,7 +115,7 @@ export const LASH_STYLES: LashStyle[] = [
     },
   },
   {
-    id: "cat",
+    id: "cat-eye",
     name: "Cat Eye",
     description: "Elongated outer corners for a lifted, feline shape.",
     intensity: "Glam",
@@ -136,7 +136,7 @@ export const LASH_STYLES: LashStyle[] = [
     },
   },
   {
-    id: "doll",
+    id: "doll-eye",
     name: "Doll Eye",
     description: "Longest in the center for a wide-awake, doll-like look.",
     intensity: "Glam",
